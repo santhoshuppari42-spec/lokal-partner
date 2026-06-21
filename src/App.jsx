@@ -1,227 +1,174 @@
+import { useState, useEffect } from "react";
 
-      <div style={s.nav}>
-        <div style={s.navBrand}>🛒 <span style={s.navBrandText}>Lokál</span></div>
-        <div style={s.navLoc}>📍 {user.area}</div>
-        <div style={s.navUser}>
-          <div style={s.navAvatar}>{user.name[0]}</div>
-          <button style={s.navLogout} onClick={onLogout}>Logout</button>
-        </div>
-      </div>
+const SUPABASE_URL = "https://ydzpbtlnckrhkcqfykcr.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlkenBidGxuY2tyaGtjcWZ5a2NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE5NjExNjcsImV4cCI6MjA5NzUzNzE2N30.bIYqV77b8dqa-SgqwL9PoN-0vpLLmZs3U4Zq2CMiIgk";
 
-      {tab==="home" && <>
-        <div style={s.searchWrap}>
-          <div style={s.searchBox}>
-            <span style={{fontSize:16}}>🔍</span>
-            <input style={s.searchInp} placeholder="Search anything..." value={search} onChange={e=>setSearch(e.target.value)} />
-            {search && <button style={s.clearSearch} onClick={()=>setSearch("")}>✕</button>}
-          </div>
-        </div>
+async function sbFetch(path, options = {}) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    ...options,
+    headers: {
+      "apikey": SUPABASE_KEY,
+      "Authorization": `Bearer ${SUPABASE_KEY}`,
+      "Content-Type": "application/json",
+      "Prefer": options.prefer || "return=representation",
+      ...(options.headers || {}),
+    },
+  });
+  if (!res.ok) {
+    let msg = res.statusText;
+    try { const j = await res.json(); msg = j.message || msg; } catch(e) {}
+    throw new Error(msg);
+  }
+  if (res.status === 204) return null;
+  return res.json();
+}
 
-        {!search && (
-          <div style={s.heroBanner}>
-            <div style={s.heroTitle}>Hi {user.name.split(" ")[0]}! 👋</div>
-            <div style={s.heroSub}>What do you need today?</div>
-            <div style={s.heroMeta}>Shops near <b>{user.area}</b> will respond instantly</div>
-          </div>
-        )}
+const db = {
+  select: (table, query = "") => sbFetch(`${table}?${query}`),
+  update: (table, query, body) => sbFetch(`${table}?${query}`, { method: "PATCH", body: JSON.stringify(body) }),
+  insert: (table, body) => sbFetch(table, { method: "POST", body: JSON.stringify(body) }),
+};
 
-        <div style={s.section}>
-          <div style={s.sectionTitle}>{search?`"${search}"`:"Browse Categories"}</div>
-          <div style={s.catGrid}>
-            {filteredCats.map(c=>(
-              <div key={c.id} style={s.catCard} onClick={()=>{setActiveCategory(c.id);setShowReqModal(true);}}>
-                <div style={s.catIcon}>{c.icon}</div>
-                <div style={s.catLabel}>{c.label}</div>
-                <div style={s.catPost}>Post →</div>
-              </div>
-            ))}
-          </div>
-        </div>
+const CATEGORIES = [
+  { id:"clothes",icon:"👕",label:"Clothes"},{id:"footwear",icon:"👟",label:"Footwear"},
+  { id:"electronics",icon:"📱",label:"Electronics"},{id:"vehicles",icon:"🚗",label:"Vehicles"},
+  { id:"furniture",icon:"🛋",label:"Furniture"},{id:"medicine",icon:"💊",label:"Medicine"},
+  { id:"food",icon:"🍱",label:"Food & Grocery"},{id:"sports",icon:"⚽",label:"Sports"},
+  { id:"books",icon:"📚",label:"Books"},{id:"beauty",icon:"💄",label:"Beauty"},
+  { id:"toys",icon:"🧸",label:"Toys"},{id:"hardware",icon:"🔨",label:"Hardware"},
+];
 
-        {myRequests.length>0 && (
-          <div style={s.section}>
-            <div style={s.sectionTitle}>📋 My Requests</div>
-            {myRequests.map(req=>{
-              const c=CATEGORIES.find(x=>x.id===req.category);
-              return (
-                <div key={req.id} style={s.reqRow} onClick={()=>openBidsFor(req)}>
-                  <div style={s.reqRowIcon}>{c?.icon}</div>
-                  <div style={{flex:1}}>
-                    <div style={s.reqRowItem}>{req.item}</div>
-                    <div style={s.reqRowMeta}>{c?.label} · {new Date(req.created_at).toLocaleDateString()}</div>
-                  </div>
-                  <div style={s.reqRowBadge}>View Bids</div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </>}
+const CITIES = {
+  Hyderabad:["Ameerpet","Madhapur","Kukatpally","Secunderabad","Banjara Hills","Gachibowli","Kondapur","KPHB","Uppal","Himayatnagar","Charminar"],
+  Bengaluru:["Koramangala","Indiranagar","Whitefield","HSR Layout","BTM Layout","Jayanagar","Marathahalli","Hebbal"],
+  Chennai:["Anna Nagar","T Nagar","Adyar","Velachery","Tambaram","Porur"],
+  Mumbai:["Andheri","Bandra","Dadar","Thane","Borivali","Malad","Powai"],
+  Delhi:["Connaught Place","Lajpat Nagar","Karol Bagh","Dwarka","Rohini","Saket","Nehru Place"],
+};
+const CITY_COORDS = {
+  Hyderabad:{lat:17.4374,lng:78.4487}, Bengaluru:{lat:12.9352,lng:77.6245},
+  Chennai:{lat:13.0827,lng:80.2707}, Mumbai:{lat:19.0760,lng:72.8777}, Delhi:{lat:28.6139,lng:77.2090},
+};
 
-      {tab==="profile" && (
-        <div style={s.section}>
-          <div style={s.profileCard}>
-            <div style={s.profileAvatar}>{user.name[0]}</div>
-            <div style={s.profileName}>{user.name}</div>
-            <div style={s.profileMeta}>📧 {user.email}</div>
-            <div style={s.profileMeta}>📞 {user.phone}</div>
-            <div style={s.profileMeta}>📍 {user.area}, {user.city}</div>
-          </div>
-          <button style={{...s.btn,background:"#EF4444"}} onClick={onLogout}>🚪 Logout</button>
-        </div>
-      )}
-
-      <div style={s.bottomNav}>
-        {[{key:"home",icon:"🏠",label:"Home"},{key:"profile",icon:"👤",label:"Profile"}].map(t=>(
-          <button key={t.key} style={s.bottomBtn} onClick={()=>setTab(t.key)}>
-            <span style={s.bottomIcon}>{t.icon}</span>
-            <span style={s.bottomLabel}>{t.label}</span>
-          </button>
+function LocationPicker({ onDone }) {
+  const [city, setCity] = useState("");
+  const [area, setArea] = useState("");
+  const [query, setQuery] = useState("");
+  const [showDrop, setShowDrop] = useState(false);
+  const [gps, setGps] = useState("idle");
+  const areas = city ? (CITIES[city]||[]).filter(a=>a.toLowerCase().includes(query.toLowerCase())) : [];
+  return (
+    <div>
+      <button style={s.gpsBtn} onClick={()=>{
+        setGps("loading");
+        navigator.geolocation.getCurrentPosition(
+          ()=>{setCity("Hyderabad");setArea("Ameerpet");setQuery("Ameerpet");setGps("done");},
+          ()=>setGps("error")
+        );
+      }}>{gps==="loading"?"🔄 Detecting...":gps==="done"?"✅ GPS Detected!":"📡 Use GPS Location"}</button>
+      <div style={s.orDiv}>— or choose manually —</div>
+      <label style={s.lbl}>City</label>
+      <div style={s.cityRow}>
+        {Object.keys(CITIES).map(c=>(
+          <button key={c} style={{...s.cBtn,...(city===c?s.cBtnA:{})}} onClick={()=>{setCity(c);setArea("");setQuery("");}}>{c}</button>
         ))}
       </div>
-      <div style={{height:70}}/>
+      {city && <>
+        <label style={{...s.lbl,marginTop:12}}>Area</label>
+        <div style={{position:"relative"}}>
+          <input style={s.inp} placeholder="Search area..." value={query}
+            onChange={e=>{setQuery(e.target.value);setShowDrop(true);}}
+            onFocus={()=>setShowDrop(true)} onBlur={()=>setTimeout(()=>setShowDrop(false),150)}/>
+          {showDrop && areas.length>0 && (
+            <div style={s.drop}>
+              {areas.map(a=><div key={a} style={s.dItem} onMouseDown={()=>{setArea(a);setQuery(a);setShowDrop(false);}}>📍 {a}</div>)}
+            </div>
+          )}
+        </div>
+      </>}
+      {(area||(gps==="done")) && (
+        <button style={s.confirmBtn} onClick={()=>onDone({
+          city:city||"Hyderabad", area:area||"Ameerpet",
+          lat: CITY_COORDS[city||"Hyderabad"].lat, lng: CITY_COORDS[city||"Hyderabad"].lng,
+        })}>✅ Confirm: {area||"Ameerpet"}, {city||"Hyderabad"}</button>
+      )}
     </div>
   );
 }
 
-export default function App() {
-  const [screen, setScreen] = useState("splash");
-  const [user, setUser] = useState(null);
-  if(screen==="splash")  return <SplashScreen onLogin={()=>setScreen("login")} onSignup={()=>setScreen("signup")} />;
-  if(screen==="login")   return <LoginScreen onSuccess={u=>{setUser(u);setScreen("home");}} onSignup={()=>setScreen("signup")} onBack={()=>setScreen("splash")} />;
-  if(screen==="signup")  return <SignupScreen onSuccess={u=>{setUser(u);setScreen("home");}} onLogin={()=>setScreen("login")} onBack={()=>setScreen("splash")} />;
-  if(screen==="home")    return <HomeScreen user={user} onLogout={()=>setScreen("splash")} />;
-  return null;
+function Splash({ onLogin, onRegister }) {
+  return (
+    <div style={s.splash}>
+      <div style={s.splashTop}>
+        <div style={s.splashLogo}>🏪</div>
+        <div style={s.splashBrand}>Lokál <span style={s.partnerBadge}>Partner</span></div>
+        <div style={s.splashTag}>partner.lokal.in · live database</div>
+        <p style={s.splashDesc}>Grow your shop. Reach customers nearby. Respond to real-time requests.</p>
+      </div>
+      <div style={s.splashBtns}>
+        <button style={s.registerBtn} onClick={onRegister}>Register My Shop →</button>
+        <button style={s.loginBtn} onClick={onLogin}>Already a Partner? Login</button>
+      </div>
+      <div style={s.splashFooter}>For customers: <span style={s.customerLink}>lokal.in</span></div>
+    </div>
+  );
 }
 
-const s = {
-  root:{fontFamily:"'Inter',system-ui,sans-serif",background:"#F8F9FB",minHeight:"100vh"},
-  splash:{position:"relative",minHeight:"100vh",fontFamily:"'Inter',system-ui,sans-serif",overflow:"hidden",background:"#1E1B4B"},
-  splashBg:{position:"absolute",inset:0,background:"linear-gradient(135deg,#1E1B4B 0%,#4F46E5 60%,#7C3AED 100%)"},
-  splashContent:{position:"relative",zIndex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"100vh",padding:24,textAlign:"center"},
-  splashLogo:{fontSize:64,marginBottom:8},
-  splashBrand:{fontWeight:900,fontSize:48,color:"#fff",letterSpacing:"-2px",marginBottom:6},
-  splashTagline:{color:"rgba(255,255,255,0.8)",fontSize:18,lineHeight:1.5,marginBottom:36},
-  splashActions:{display:"flex",flexDirection:"column",gap:12,width:"100%",maxWidth:320,marginBottom:28},
-  splashSignup:{background:"#fff",color:"#4F46E5",border:"none",padding:"15px",borderRadius:12,fontSize:16,fontWeight:900,cursor:"pointer"},
-  splashLogin:{background:"rgba(255,255,255,0.15)",color:"#fff",border:"2px solid rgba(255,255,255,0.4)",padding:"15px",borderRadius:12,fontSize:16,fontWeight:700,cursor:"pointer"},
-  splashSeller:{color:"rgba(255,255,255,0.5)",fontSize:13},
-  splashSellerLink:{color:"rgba(255,255,255,0.8)",fontWeight:700},
-  authPage:{fontFamily:"'Inter',system-ui,sans-serif",background:"#F8F9FB",minHeight:"100vh"},
-  authNav:{background:"#fff",borderBottom:"1px solid #E5E7EB",padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"},
-  authNavBrand:{fontSize:18,letterSpacing:"-0.3px"},
-  backBtn:{background:"none",border:"none",fontSize:20,color:"#374151",cursor:"pointer",width:32,fontWeight:700},
-  stepCounter:{fontSize:13,fontWeight:700,color:"#9CA3AF"},
-  progressBar:{height:3,background:"#E5E7EB"},
-  progressFill:{height:3,background:"#4F46E5",transition:"width 0.3s"},
-  authBody:{padding:"28px 20px"},
-  authTitle:{fontWeight:900,fontSize:26,margin:"0 0 6px",letterSpacing:"-0.5px"},
-  authSub:{color:"#6B7280",fontSize:14,marginBottom:22},
-  authCard:{background:"#fff",border:"1px solid #E5E7EB",borderRadius:16,padding:22,marginBottom:16},
-  lbl:{display:"block",fontWeight:700,fontSize:13,color:"#374151",marginBottom:5},
-  inp:{width:"100%",boxSizing:"border-box",border:"1.5px solid #E5E7EB",borderRadius:8,padding:"11px 12px",fontSize:14,marginBottom:14,outline:"none",color:"#111",fontFamily:"inherit"},
-  btn:{width:"100%",background:"#4F46E5",color:"#fff",border:"none",padding:"13px",borderRadius:10,fontSize:15,fontWeight:800,cursor:"pointer",fontFamily:"inherit"},
-  eyeBtn:{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:16,marginTop:-7},
-  errMsg:{color:"#EF4444",fontSize:13,marginBottom:12,fontWeight:600,background:"#FEF2F2",padding:"8px 12px",borderRadius:8},
-  savingMsg:{color:"#4F46E5",fontSize:13,fontWeight:600,background:"#EEF2FF",padding:"8px 12px",borderRadius:8,marginBottom:12},
-  switchRow:{textAlign:"center",fontSize:14,color:"#6B7280"},
-  switchBtn:{background:"none",border:"none",color:"#4F46E5",fontWeight:700,cursor:"pointer",fontSize:14},
-  otpSentBox:{background:"#D1FAE5",color:"#065F46",fontWeight:700,fontSize:13,padding:"10px 12px",borderRadius:8,marginBottom:16},
-  otpRow:{display:"flex",gap:8,justifyContent:"center",marginBottom:16},
-  otpBox:{width:42,height:48,textAlign:"center",fontSize:20,fontWeight:800,border:"2px solid #E5E7EB",borderRadius:8,outline:"none",fontFamily:"inherit"},
-  gpsBtn:{width:"100%",background:"#4F46E5",color:"#fff",border:"none",padding:"12px",borderRadius:10,fontSize:14,fontWeight:800,cursor:"pointer",marginBottom:12,fontFamily:"inherit"},
-  orDivider:{textAlign:"center",color:"#9CA3AF",fontSize:12,marginBottom:12},
-  cityRow:{display:"flex",flexWrap:"wrap",gap:8,marginBottom:8},
-  cBtn:{border:"1.5px solid #E5E7EB",background:"#fff",borderRadius:8,padding:"7px 12px",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit"},
-  cBtnA:{border:"1.5px solid #4F46E5",background:"#EEF2FF",color:"#4F46E5"},
-  drop:{position:"absolute",top:"100%",left:0,right:0,background:"#fff",border:"1.5px solid #E5E7EB",borderRadius:8,zIndex:99,boxShadow:"0 4px 16px rgba(0,0,0,0.12)",maxHeight:180,overflowY:"auto"},
-  dItem:{padding:"10px 14px",fontSize:13,cursor:"pointer",borderBottom:"1px solid #F3F4F6"},
-  nav:{background:"#fff",borderBottom:"1px solid #E5E7EB",padding:"10px 16px",display:"flex",alignItems:"center",gap:10,position:"sticky",top:0,zIndex:50},
-  navBrand:{display:"flex",alignItems:"center",gap:5,fontWeight:900,fontSize:20,color:"#4F46E5",flexShrink:0},
-  navBrandText:{letterSpacing:"-0.5px"},
-  navLoc:{flex:1,textAlign:"center",fontSize:12,fontWeight:700,color:"#4F46E5",background:"#EEF2FF",padding:"5px 12px",borderRadius:20},
-  navUser:{display:"flex",alignItems:"center",gap:8},
-  navAvatar:{width:30,height:30,borderRadius:"50%",background:"#4F46E5",color:"#fff",fontWeight:900,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"},
-  navLogout:{background:"none",border:"1px solid #E5E7EB",color:"#9CA3AF",fontSize:11,padding:"4px 8px",borderRadius:6,cursor:"pointer"},
-  searchWrap:{padding:"10px 14px",background:"#fff",borderBottom:"1px solid #F3F4F6"},
-  searchBox:{display:"flex",alignItems:"center",gap:8,background:"#F3F4F6",borderRadius:12,padding:"10px 14px"},
-  searchInp:{flex:1,background:"none",border:"none",outline:"none",fontSize:14,color:"#111",fontFamily:"inherit"},
-  clearSearch:{background:"none",border:"none",color:"#9CA3AF",cursor:"pointer",fontSize:16},
-  heroBanner:{background:"linear-gradient(135deg,#4F46E5,#7C3AED)",padding:"22px 20px"},
-  heroTitle:{color:"#fff",fontWeight:900,fontSize:22,marginBottom:4},
-  heroSub:{color:"rgba(255,255,255,0.9)",fontSize:15,marginBottom:4},
-  heroMeta:{color:"rgba(255,255,255,0.7)",fontSize:12},
-  section:{padding:"16px"},
-  sectionTitle:{fontWeight:900,fontSize:16,marginBottom:12},
-  catGrid:{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10},
-  catCard:{background:"#fff",borderRadius:14,padding:"14px 10px",border:"1px solid #E5E7EB",cursor:"pointer",textAlign:"center"},
-  catIcon:{fontSize:26,marginBottom:6},
-  catLabel:{fontWeight:700,fontSize:12,marginBottom:6},
-  catPost:{background:"#EEF2FF",color:"#4F46E5",fontSize:10,fontWeight:800,padding:"4px 8px",borderRadius:6},
-  reqRow:{background:"#fff",border:"1px solid #E5E7EB",borderRadius:12,padding:"12px 14px",display:"flex",alignItems:"center",gap:10,marginBottom:8,cursor:"pointer"},
-  reqRowIcon:{fontSize:22},
-  reqRowItem:{fontWeight:800,fontSize:13,marginBottom:2},
-  reqRowMeta:{fontSize:11,color:"#9CA3AF"},
-  reqRowBadge:{background:"#EEF2FF",color:"#4F46E5",fontSize:11,fontWeight:800,padding:"4px 10px",borderRadius:20,whiteSpace:"nowrap"},
-  overlay:{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:100,display:"flex",alignItems:"flex-end"},
-  modal:{background:"#fff",borderRadius:"20px 20px 0 0",width:"100%",maxHeight:"90vh",overflowY:"auto",padding:"20px 18px 36px"},
-  modalTop:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14},
-  modalTitle:{fontWeight:900,fontSize:17},
-  modalClose:{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#9CA3AF"},
-  subChips:{display:"flex",flexWrap:"wrap",gap:7},
-  chip:{border:"1.5px solid #E5E7EB",background:"#fff",borderRadius:8,padding:"6px 11px",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"},
-  chipA:{border:"1.5px solid #4F46E5",background:"#EEF2FF",color:"#4F46E5"},
-  subNav:{background:"#fff",borderBottom:"1px solid #E5E7EB",padding:"11px 14px",display:"flex",alignItems:"center",gap:10,position:"sticky",top:0,zIndex:10},
-  subNavTitle:{fontWeight:900,fontSize:15},
-  subNavSub:{fontSize:11,color:"#6B7280",marginTop:2},
-  bidsPage:{padding:14},
-  reqSummary:{background:"#EEF2FF",border:"1.5px solid #C7D2FE",borderRadius:12,padding:"12px 14px",marginBottom:14},
-  reqSumLabel:{fontSize:10,fontWeight:800,color:"#4F46E5",letterSpacing:"0.5px",marginBottom:4},
-  reqSumItem:{fontWeight:900,fontSize:16,marginBottom:3},
-  reqSumDesc:{fontSize:13,color:"#374151",marginBottom:3},
-  reqSumBudget:{fontSize:13,color:"#059669",fontWeight:700},
-  bidsLabel:{fontWeight:800,fontSize:14,marginBottom:10},
-  emptyMini:{color:"#9CA3AF",fontSize:13,textAlign:"center",padding:20},
-  bidCard:{background:"#fff",border:"1px solid #E5E7EB",borderRadius:14,padding:14,marginBottom:10},
-  bidHead:{display:"flex",alignItems:"center",gap:10,marginBottom:10},
-  bidShopAv:{width:38,height:38,borderRadius:10,background:"#4F46E5",color:"#fff",fontWeight:900,fontSize:17,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0},
-  bidShopName:{fontWeight:800,fontSize:14,marginBottom:2},
-  bidShopMeta:{fontSize:12,color:"#9CA3AF"},
-  avail:{background:"#D1FAE5",color:"#059669",fontSize:11,fontWeight:800,padding:"4px 9px",borderRadius:20,flexShrink:0},
-  unavail:{background:"#FEE2E2",color:"#DC2626",fontSize:11,fontWeight:800,padding:"4px 9px",borderRadius:20,flexShrink:0},
-  bidPriceRow:{display:"flex",alignItems:"center",gap:10,marginBottom:5},
-  bidPrice:{fontWeight:900,fontSize:20},
-  delivBadge:{background:"#D1FAE5",color:"#059669",fontSize:11,fontWeight:700,padding:"3px 8px",borderRadius:20},
-  pickBadge:{background:"#F3F4F6",color:"#6B7280",fontSize:11,fontWeight:700,padding:"3px 8px",borderRadius:20},
-  bidEta:{fontSize:12,color:"#F59E0B",fontWeight:700,marginBottom:5},
-  bidNote:{fontSize:12,color:"#6B7280",fontStyle:"italic",marginBottom:4,lineHeight:1.4},
-  bidTime:{fontSize:11,color:"#D1D5DB",marginBottom:10},
-  bidBtns:{display:"flex",gap:8},
-  chatBidBtn:{flex:1,background:"#EEF2FF",color:"#4F46E5",border:"none",padding:"9px",borderRadius:8,fontWeight:800,cursor:"pointer",fontSize:13},
-  orderNowBtn:{flex:1,background:"#4F46E5",color:"#fff",border:"none",padding:"9px",borderRadius:8,fontWeight:800,cursor:"pointer",fontSize:13},
-  waitingPill:{background:"#FFFBEB",border:"1px solid #FCD34D",borderRadius:20,padding:"9px 16px",fontSize:13,color:"#92400E",fontWeight:600,textAlign:"center"},
-  chatFull:{fontFamily:"'Inter',system-ui,sans-serif",display:"flex",flexDirection:"column",height:"100vh",background:"#F0F4FF"},
-  chatNav:{background:"#4F46E5",padding:"12px 14px",display:"flex",alignItems:"center",gap:10},
-  chatAvatar:{width:36,height:36,borderRadius:10,background:"rgba(255,255,255,0.2)",color:"#fff",fontWeight:900,fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0},
-  chatShopName:{fontWeight:800,fontSize:15,color:"#fff"},
-  chatShopSub:{fontSize:11,color:"rgba(255,255,255,0.7)"},
-  chatRating:{color:"#fff",fontSize:13,fontWeight:700},
-  chatMessages:{flex:1,overflowY:"auto",padding:"16px 14px"},
-  bubbleU:{background:"#4F46E5",color:"#fff",padding:"10px 14px",borderRadius:"16px 16px 4px 16px",maxWidth:260,fontSize:14,lineHeight:1.5},
-  bubbleS:{background:"#fff",color:"#111",padding:"10px 14px",borderRadius:"16px 16px 16px 4px",maxWidth:260,fontSize:14,lineHeight:1.5,boxShadow:"0 1px 4px rgba(0,0,0,0.08)"},
-  chatInputWrap:{background:"#fff",borderTop:"1px solid #E5E7EB",padding:"10px 14px",display:"flex",gap:8,alignItems:"center"},
-  chatField:{flex:1,border:"1.5px solid #E5E7EB",borderRadius:22,padding:"10px 14px",fontSize:14,outline:"none",fontFamily:"inherit"},
-  sendBtn:{background:"#4F46E5",color:"#fff",border:"none",width:40,height:40,borderRadius:"50%",fontWeight:900,cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"},
-  bottomNav:{position:"fixed",bottom:0,left:0,right:0,background:"#fff",borderTop:"1px solid #E5E7EB",display:"flex",zIndex:50},
-  bottomBtn:{flex:1,background:"none",border:"none",padding:"8px 0 6px",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2},
-  bottomIcon:{fontSize:22},
-  bottomLabel:{fontSize:10,fontWeight:700,color:"#9CA3AF"},
-  profileCard:{background:"#fff",border:"1px solid #E5E7EB",borderRadius:16,padding:24,textAlign:"center",marginBottom:16},
-  profileAvatar:{width:64,height:64,borderRadius:"50%",background:"#4F46E5",color:"#fff",fontWeight:900,fontSize:28,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px"},
-  profileName:{fontWeight:900,fontSize:20,marginBottom:6},
-  profileMeta:{fontSize:13,color:"#6B7280",marginBottom:4},
-};
-  const [otp, setOtp] = useState("");
+function Login({ onSuccess, onRegister, onBack }) {
+  const [email, setEmail] = useState("");
+  const [pass, setPass] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [showPass, setShowPass] = useState(false);
+
+  const login = async () => {
+    setLoading(true); setError("");
+    try {
+      const results = await db.select("shops", `or=(email.eq.${encodeURIComponent(email)},phone.eq.${encodeURIComponent(email)})&password=eq.${encodeURIComponent(pass)}&limit=1`);
+      if (!results || results.length === 0) { setError("Wrong email/phone or password"); setLoading(false); return; }
+      onSuccess(results[0]);
+    } catch(e) { setError("Login failed: " + e.message); setLoading(false); }
+  };
+
+  return (
+    <div style={s.authPage}>
+      <div style={s.authNav}>
+        <button style={s.backBtn} onClick={onBack}>←</button>
+        <div style={s.authBrand}>🏪 <b>Lokál Partner</b></div>
+        <div style={{width:32}}/>
+      </div>
+      <div style={s.authBody}>
+        <h2 style={s.authTitle}>Partner Login</h2>
+        <p style={s.authSub}>Access your shop dashboard</p>
+        <div style={s.card}>
+          <label style={s.lbl}>Email or Phone</label>
+          <input style={s.inp} placeholder="shop@email.com or phone number" value={email} onChange={e=>setEmail(e.target.value)} />
+          <label style={s.lbl}>Password</label>
+          <div style={{position:"relative"}}>
+            <input style={s.inp} type={showPass?"text":"password"} placeholder="Your password" value={pass} onChange={e=>setPass(e.target.value)} onKeyDown={e=>e.key==="Enter"&&login()} />
+            <button style={s.eyeBtn} onClick={()=>setShowPass(!showPass)}>{showPass?"🙈":"👁"}</button>
+          </div>
+          {error && <div style={s.errBox}>❌ {error}</div>}
+          <button style={{...s.primaryBtn,background:"#F59E0B",opacity:(email&&pass)?1:0.45}} onClick={login}>
+            {loading?"Logging in...":"Login to Dashboard →"}
+          </button>
+          <div style={s.demoBox}>
+            <div style={s.demoTitle}>Test Account (pre-approved)</div>
+            <div style={s.demoRow} onClick={()=>{setEmail("suresh@shop.com");setPass("shop123");}}>
+              <span>Sharma Textiles — suresh@shop.com</span><span style={s.useBtn}>Use</span>
+            </div>
+          </div>
+        </div>
+        <div style={s.switchRow}>New shop? <button style={s.switchBtn} onClick={onRegister}>Register here</button></div>
+      </div>
+    </div>
+  );
+}
+
+function Register({ onBack, onLogin }) {
+  const [step, setStep] = useState(1);
+  const [form, setForm] = useState({name:"",owner:"",phone:"",email:"",pass:"",confirm:"",category:"",gst:"",aadhaar:""});
+        const [otp, setOtp] = useState("");
   const [done, setDone] = useState(false);
   const [loc, setLoc] = useState(null);
   const [error, setError] = useState("");
@@ -390,8 +337,7 @@ function Dashboard({ shop, onLogout }) {
   useEffect(()=>{
     if(!chatReq) return;
     (async () => {
-      try {
-                const data = await db.select("messages", `request_id=eq.${chatReq.id}&shop_id=eq.${myShop.id}&order=created_at.asc`);
+      try {        const data = await db.select("messages", `request_id=eq.${chatReq.id}&shop_id=eq.${myShop.id}&order=created_at.asc`);
         setChatLog(data||[]);
       } catch(e) { console.error(e); }
     })();
@@ -561,7 +507,7 @@ function Dashboard({ shop, onLogout }) {
             );
           })}
         </div>
-            )}
+                )}
 
       {tab==="profile" && (
         <div style={s.body}>
